@@ -1,0 +1,23 @@
+# OS / editor noise
+.DS_Store
+
+# Dependencies / build cache
+node_modules/
+.vite/
+
+# Local player mappings and temporary live samples
+player-directory.live-samples.json
+
+# Generated live capture artifacts
+snapshots/
+market-snapshots/
+multi-market-comparisons/
+
+# Generated data products and local caches
+data/outcomes/
+data/baselines/
+data/polymarket/raw/
+data/polymarket/processed/
+
+# Optional local logs / temp files
+*.log

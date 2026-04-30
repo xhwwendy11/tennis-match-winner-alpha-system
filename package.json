@@ -1,0 +1,50 @@
+{
+  "name": "tennis-match-winner-alpha-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "extract": "tsx src/cli/extractByUrl.ts",
+    "snapshot": "tsx src/cli/extractSnapshot.ts",
+    "capture:snapshot": "tsx src/cli/captureSnapshot.ts",
+    "compare:markets": "tsx src/cli/compareMarkets.ts",
+    "recapture:markets": "tsx src/cli/recaptureMarkets.ts",
+    "baseline:prefetch": "tsx src/cli/prefetchFlashscoreHistoricalBaselines.ts",
+    "resolve:outcomes": "tsx src/cli/resolveOutcomes.ts",
+    "report:calibration": "tsx src/cli/calibrationReport.ts",
+    "report:candidates": "tsx src/cli/candidateReport.ts",
+    "report:pfair-calibration": "tsx src/cli/pfairCalibrationReport.ts",
+    "report:tour-segments": "tsx src/cli/tourSegmentationReport.ts",
+    "report:multi-market": "tsx src/cli/multiMarketReport.ts",
+    "report:provider-deviation": "tsx src/cli/providerDeviationReport.ts",
+    "report:resolved-cross-market": "tsx src/cli/resolvedCrossMarketStudy.ts",
+    "report:recapture-paths": "tsx src/cli/recapturePathReport.ts",
+    "report:setup-taxonomy": "tsx src/cli/setupTaxonomyReport.ts",
+    "report:setup-outcomes": "tsx src/cli/setupOutcomeStudy.ts",
+    "report:execution-dataset": "tsx src/cli/executionDataset.ts",
+    "report:labeled-execution-dataset": "tsx src/cli/labeledExecutionDataset.ts",
+    "report:execution-study": "tsx src/cli/executionStudy.ts",
+    "report:execution-ranking": "tsx src/cli/executionRanking.ts",
+    "report:execution-shortlist": "tsx src/cli/executionShortlist.ts",
+    "report:execution-synthesis": "tsx src/cli/executionSynthesis.ts",
+    "report:resolved-execution-audit": "tsx src/cli/resolvedExecutionAudit.ts",
+    "report:portfolio-risk-budget": "tsx src/cli/portfolioRiskBudget.ts",
+    "report:portfolio-audit": "tsx src/cli/portfolioAudit.ts",
+    "report:policy-segment-audit": "tsx src/cli/policySegmentAudit.ts",
+    "report:coverage": "tsx src/cli/coverageQualityReport.ts",
+    "scan:polymarket": "tsx src/cli/scanPolymarketHistorical.ts",
+    "aggregate:polymarket": "tsx src/cli/aggregatePolymarketPriceSeries.ts",
+    "report:polymarket-history": "tsx src/cli/polymarketHistoryReport.ts",
+    "report:polymarket-eligibility": "tsx src/cli/polymarketEligibilityReport.ts",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "playwright-core": "^1.59.1"
+  }
+}

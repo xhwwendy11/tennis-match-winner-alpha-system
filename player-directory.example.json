@@ -1,0 +1,30 @@
+[
+  {
+    "source": "atp",
+    "sourcePlayerId": "S0AG",
+    "flashscorePlayerId": "flash-a",
+    "flashscoreSlug": "jannik-sinner",
+    "fullName": "Jannik Sinner",
+    "aliases": ["Sinner J."]
+  },
+  {
+    "source": "wta",
+    "sourcePlayerId": "326408",
+    "flashscorePlayerId": "flash-wta-a",
+    "flashscoreSlug": "iga-swiatek",
+    "fullName": "Iga Swiatek",
+    "aliases": ["Swiatek I."]
+  },
+  {
+    "source": "itf",
+    "sourcePlayerId": "800564568",
+    "flashscorePlayerId": "flash-itf-a",
+    "flashscoreSlug": "lilli-tagger",
+    "fullName": "Lilli Tagger",
+    "aliases": ["Tagger L."],
+    "meta": {
+      "circuitCode": "WT",
+      "matchTypeCode": "S"
+    }
+  }
+]
