@@ -7,6 +7,7 @@
     "extract": "tsx src/cli/extractByUrl.ts",
     "snapshot": "tsx src/cli/extractSnapshot.ts",
     "capture:snapshot": "tsx src/cli/captureSnapshot.ts",
+    "pfair:server-input": "tsx src/cli/pfairFromServerInput.ts",
     "compare:markets": "tsx src/cli/compareMarkets.ts",
     "recapture:markets": "tsx src/cli/recaptureMarkets.ts",
     "baseline:prefetch": "tsx src/cli/prefetchFlashscoreHistoricalBaselines.ts",
