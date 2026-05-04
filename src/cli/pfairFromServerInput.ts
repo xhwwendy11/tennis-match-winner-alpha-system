@@ -86,6 +86,7 @@ export async function main(argv = process.argv): Promise<void> {
   })
 
   const quality = inferSnapshotQuality(result.decisionSnapshot)
+  const pFair = result.probabilityState.pFair
   console.log(
     JSON.stringify(
       {
@@ -114,7 +115,19 @@ export async function main(argv = process.argv): Promise<void> {
         sourceCoverage: result.decisionSnapshot.sourceCoverage,
         quality,
         risk: result.decisionSnapshot.risk,
-        pFair: result.probabilityState.pFair,
+        statsAvailable: result.decisionSnapshot.sourceCoverage.flashscoreStatsAvailable,
+        pPoint: pFair.point,
+        pGame: pFair.game,
+        pSet: pFair.set,
+        pMatch: pFair.match,
+        pFair: {
+          point: pFair.point,
+          game: pFair.game,
+          set: pFair.set,
+          match: pFair.match,
+          anchor: pFair.anchor,
+          diagnostics: pFair.diagnostics,
+        },
       },
       null,
       2,

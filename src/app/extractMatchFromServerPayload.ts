@@ -11,6 +11,11 @@ import { deriveTennisTradePlan } from '../rules/tennis/tradePlan.js'
 import type { ServerTennisMatchEnvelope, ServerTennisMatchPayload } from '../server/tennisPayload.js'
 import { mapServerPayloadToTennisFeedMatch } from '../server/tennisPayload.js'
 
+function hasUsableStats(stats: Record<string, unknown> | null | undefined): boolean {
+  if (!stats) return false
+  return Object.values(stats).some((value) => value != null && String(value).trim() !== '')
+}
+
 export interface ExtractFromServerPayloadOptions {
   prematchBaseline?: PrematchBaseline | null
   playerDirectory?: Parameters<typeof buildPrematchBaselineFromProviders>[1]['directory']
@@ -38,7 +43,10 @@ export async function extractMatchFromServerPayload(
   const baseMatch = mapServerPayloadToTennisFeedMatch(payload)
   let enrichedFlashscoreStats = baseMatch.stats
 
-  if (options?.enrichFlashscoreStats && baseMatch.sourcePageUrl) {
+  const shouldEnrichFlashscoreStats =
+    !!baseMatch.sourcePageUrl && (options?.enrichFlashscoreStats || !hasUsableStats(baseMatch.stats))
+
+  if (shouldEnrichFlashscoreStats) {
     const fetched = await fetchDirectTennisMatchPage(baseMatch.sourcePageUrl, {
       force: true,
       includeRenderedServe: false,
