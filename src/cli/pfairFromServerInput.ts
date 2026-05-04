@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { extractMatchFromServerPayload } from '../app/extractMatchFromServerPayload.js'
@@ -8,6 +8,7 @@ import { FlashscoreHistoricalBaselineProvider } from '../flashscore/historicalBa
 import { MemoryBaselineCache } from '../foundation/baselineCache.js'
 import type { PlayerDirectoryEntry } from '../foundation/playerMapping.js'
 import { inferSnapshotQuality } from '../foundation/snapshotReportEnrichment.js'
+import { buildSnapshotStoragePath } from '../foundation/snapshotDataset.js'
 import { ItfClient } from '../itf/client.js'
 import { ItfOfficialDirectoryClient } from '../itf/directoryClient.js'
 import type { ServerTennisMatchEnvelope, ServerTennisMatchPayload } from '../server/tennisPayload.js'
@@ -87,47 +88,104 @@ export async function main(argv = process.argv): Promise<void> {
 
   const quality = inferSnapshotQuality(result.decisionSnapshot)
   const pFair = result.probabilityState.pFair
+  const summary = {
+    ok: true,
+    inputPath: absoluteInputPath,
+    match: {
+      matchId: result.decisionSnapshot.match.matchId,
+      teamA: result.decisionSnapshot.match.teamA,
+      teamB: result.decisionSnapshot.match.teamB,
+      status: result.decisionSnapshot.match.status,
+      serverSide: result.decisionSnapshot.match.serverSide,
+      setIndex: result.decisionSnapshot.match.setIndex,
+      currentSetGamesA: result.decisionSnapshot.match.currentSetGamesA,
+      currentSetGamesB: result.decisionSnapshot.match.currentSetGamesB,
+      currentGamePointsA: result.decisionSnapshot.match.currentGamePointsA,
+      currentGamePointsB: result.decisionSnapshot.match.currentGamePointsB,
+    },
+    baseline: {
+      source: result.prematchBaseline?.source ?? null,
+      complete: result.prematchBaseline?.complete ?? false,
+      holdBaselineA: result.prematchBaseline?.holdBaselineA ?? null,
+      holdBaselineB: result.prematchBaseline?.holdBaselineB ?? null,
+      breakBaselineA: result.prematchBaseline?.breakBaselineA ?? null,
+      breakBaselineB: result.prematchBaseline?.breakBaselineB ?? null,
+    },
+    sourceCoverage: result.decisionSnapshot.sourceCoverage,
+    quality,
+    risk: result.decisionSnapshot.risk,
+    statsAvailable: result.decisionSnapshot.sourceCoverage.flashscoreStatsAvailable,
+    pPoint: pFair.point,
+    pGame: pFair.game,
+    pSet: pFair.set,
+    pMatch: pFair.match,
+    pFair: {
+      point: pFair.point,
+      game: pFair.game,
+      set: pFair.set,
+      match: pFair.match,
+      anchor: pFair.anchor,
+      diagnostics: pFair.diagnostics,
+    },
+  }
+
+  const relativeSnapshotPath = buildSnapshotStoragePath(result.decisionSnapshot)
+  const absoluteSnapshotPath = path.resolve(process.cwd(), relativeSnapshotPath)
+  await mkdir(path.dirname(absoluteSnapshotPath), { recursive: true })
+  await writeFile(absoluteSnapshotPath, `${JSON.stringify(result.decisionSnapshot, null, 2)}\n`, 'utf8')
+
+  const relativeSummaryPath = buildSnapshotStoragePath(result.decisionSnapshot, 'pfair-server-runs')
+  const absoluteSummaryPath = path.resolve(process.cwd(), relativeSummaryPath)
+  await mkdir(path.dirname(absoluteSummaryPath), { recursive: true })
+  await writeFile(absoluteSummaryPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
+
+  const matchIdSegment = String(result.decisionSnapshot.match.matchId || 'unknown-match')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'unknown-match'
+  const absoluteTimeSeriesPath = path.resolve(process.cwd(), 'pfair-time-series', `${matchIdSegment}.jsonl`)
+  await mkdir(path.dirname(absoluteTimeSeriesPath), { recursive: true })
+  await appendFile(
+    absoluteTimeSeriesPath,
+    `${JSON.stringify({
+      capturedAt: result.decisionSnapshot.capturedAt,
+      matchId: result.decisionSnapshot.match.matchId,
+      teamA: result.decisionSnapshot.match.teamA,
+      teamB: result.decisionSnapshot.match.teamB,
+      status: result.decisionSnapshot.match.status,
+      serverSide: result.decisionSnapshot.match.serverSide,
+      setIndex: result.decisionSnapshot.match.setIndex,
+      currentSetGamesA: result.decisionSnapshot.match.currentSetGamesA,
+      currentSetGamesB: result.decisionSnapshot.match.currentSetGamesB,
+      currentGamePointsA: result.decisionSnapshot.match.currentGamePointsA,
+      currentGamePointsB: result.decisionSnapshot.match.currentGamePointsB,
+      baselineSource: result.prematchBaseline?.source ?? null,
+      baselineComplete: result.prematchBaseline?.complete ?? false,
+      statsAvailable: result.decisionSnapshot.sourceCoverage.flashscoreStatsAvailable,
+      qualityTier: quality.tier,
+      qualityReason: quality.reason,
+      riskLevel: result.decisionSnapshot.risk.level,
+      riskRule: result.decisionSnapshot.risk.matchedRule,
+      pPointA: pFair.point.pPointA,
+      pPointB: pFair.point.pPointB,
+      pGameA: pFair.game.pGameA,
+      pGameB: pFair.game.pGameB,
+      pSetA: pFair.set.pSetA,
+      pSetB: pFair.set.pSetB,
+      pMatchA: pFair.match.pMatchA,
+      pMatchB: pFair.match.pMatchB,
+    })}\n`,
+    'utf8',
+  )
+
   console.log(
     JSON.stringify(
       {
-        ok: true,
-        inputPath: absoluteInputPath,
-        match: {
-          matchId: result.decisionSnapshot.match.matchId,
-          teamA: result.decisionSnapshot.match.teamA,
-          teamB: result.decisionSnapshot.match.teamB,
-          status: result.decisionSnapshot.match.status,
-          serverSide: result.decisionSnapshot.match.serverSide,
-          setIndex: result.decisionSnapshot.match.setIndex,
-          currentSetGamesA: result.decisionSnapshot.match.currentSetGamesA,
-          currentSetGamesB: result.decisionSnapshot.match.currentSetGamesB,
-          currentGamePointsA: result.decisionSnapshot.match.currentGamePointsA,
-          currentGamePointsB: result.decisionSnapshot.match.currentGamePointsB,
-        },
-        baseline: {
-          source: result.prematchBaseline?.source ?? null,
-          complete: result.prematchBaseline?.complete ?? false,
-          holdBaselineA: result.prematchBaseline?.holdBaselineA ?? null,
-          holdBaselineB: result.prematchBaseline?.holdBaselineB ?? null,
-          breakBaselineA: result.prematchBaseline?.breakBaselineA ?? null,
-          breakBaselineB: result.prematchBaseline?.breakBaselineB ?? null,
-        },
-        sourceCoverage: result.decisionSnapshot.sourceCoverage,
-        quality,
-        risk: result.decisionSnapshot.risk,
-        statsAvailable: result.decisionSnapshot.sourceCoverage.flashscoreStatsAvailable,
-        pPoint: pFair.point,
-        pGame: pFair.game,
-        pSet: pFair.set,
-        pMatch: pFair.match,
-        pFair: {
-          point: pFair.point,
-          game: pFair.game,
-          set: pFair.set,
-          match: pFair.match,
-          anchor: pFair.anchor,
-          diagnostics: pFair.diagnostics,
-        },
+        ...summary,
+        snapshotPath: absoluteSnapshotPath,
+        summaryPath: absoluteSummaryPath,
+        timeSeriesPath: absoluteTimeSeriesPath,
       },
       null,
       2,
