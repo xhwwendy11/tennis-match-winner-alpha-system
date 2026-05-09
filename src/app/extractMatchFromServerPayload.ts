@@ -9,7 +9,7 @@ import { fetchDirectMatchPage as fetchDirectTennisMatchPage } from '../realtime-
 import { evaluateTennisPointRisk } from '../rules/tennis/pointRiskEngine.js'
 import { deriveTennisTradePlan } from '../rules/tennis/tradePlan.js'
 import type { ServerTennisMatchEnvelope, ServerTennisMatchPayload } from '../server/tennisPayload.js'
-import { mapServerPayloadToTennisFeedMatch } from '../server/tennisPayload.js'
+import { mapServerPayloadToTennisFeedMatch, unwrapServerTennisMatchPayload } from '../server/tennisPayload.js'
 
 function hasUsableStats(stats: Record<string, unknown> | null | undefined): boolean {
   if (!stats) return false
@@ -40,6 +40,7 @@ export async function extractMatchFromServerPayload(
   payload: ServerTennisMatchPayload | ServerTennisMatchEnvelope,
   options?: ExtractFromServerPayloadOptions,
 ) {
+  const rawMatchPayload = unwrapServerTennisMatchPayload(payload)
   const baseMatch = mapServerPayloadToTennisFeedMatch(payload)
   let enrichedFlashscoreStats = baseMatch.stats
 
@@ -70,7 +71,7 @@ export async function extractMatchFromServerPayload(
     kalshi: null,
   })
   const pointRisk = evaluateTennisPointRisk(match)
-  const prematchBaseline =
+  const derivedPrematchBaseline =
     options?.prematchBaseline ??
     (
       options?.playerDirectory
@@ -107,6 +108,11 @@ export async function extractMatchFromServerPayload(
             surface: options?.surface,
           })
     )
+  const prematchBaseline = {
+    ...derivedPrematchBaseline,
+    pointBaselineA: rawMatchPayload.pA ?? derivedPrematchBaseline.pointBaselineA ?? null,
+    pointBaselineB: rawMatchPayload.pB ?? derivedPrematchBaseline.pointBaselineB ?? null,
+  }
   const probabilityState = buildProbabilityState({
     state: canonicalMatchState,
     pointRisk,

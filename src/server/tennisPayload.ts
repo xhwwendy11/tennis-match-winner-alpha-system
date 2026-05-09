@@ -32,6 +32,8 @@ export interface ServerTennisMatchPayload {
   matchId?: string | null
   matchUrl?: string | null
   sourcePageUrl?: string | null
+  pA?: number | null
+  pB?: number | null
   tournamentName?: string | null
   tournamentPath?: string | null
   tournamentLabel?: string | null

@@ -7,6 +7,8 @@ describe('mapServerPayloadToTennisFeedMatch', () => {
     const result = mapServerPayloadToTennisFeedMatch({
       matchId: 'match-1',
       matchUrl: 'https://www.flashscore.com/match/tennis/example',
+      pA: 0.68,
+      pB: 0.64,
       tournamentName: 'ATP Test Event',
       tournamentLabel: 'ATP - Singles',
       round: 'Quarter-finals',

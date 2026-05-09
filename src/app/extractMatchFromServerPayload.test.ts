@@ -168,4 +168,54 @@ describe('extractMatchFromServerPayload', () => {
     expect(result.resolvedStats?.pointsWonA?.value).toBe(55)
     expect(result.probabilityState.pFair.diagnostics.pointFairA).not.toBeNull()
   })
+
+  it('accepts explicit pA and pB from server payload and uses them as point baselines', async () => {
+    const baseline: PrematchBaseline = {
+      source: 'market',
+      complete: true,
+      bestOf: 3,
+      surface: 'hard',
+      tourType: 'ATP',
+      prematchFairProbA: 0.58,
+      prematchFairProbB: 0.42,
+      strengthBucketA: 'balanced',
+      strengthBucketB: 'balanced',
+      pointBaselineA: 0.61,
+      pointBaselineB: 0.59,
+      holdBaselineA: 0.82,
+      holdBaselineB: 0.78,
+      breakBaselineA: 0.22,
+      breakBaselineB: 0.18,
+    }
+
+    const result = await extractMatchFromServerPayload(
+      {
+        matchId: 'server-match-pa-pb',
+        matchUrl: 'https://www.flashscore.com/match/tennis/example',
+        sourcePageUrl: 'https://www.flashscore.com/match/tennis/example?mid=abc',
+        pA: 0.68,
+        pB: 0.64,
+        tournamentName: 'ATP Test Event',
+        tournamentLabel: 'ATP - Singles',
+        round: 'Semi-finals',
+        status: 'LIVE',
+        teamA: { name: 'Player A', score: 1 },
+        teamB: { name: 'Player B', score: 0 },
+        currentSet: { label: 'Set 2', teamAScore: 4, teamBScore: 3 },
+        currentGame: { teamAScore: '30', teamBScore: '15' },
+        serverSide: 'teamA',
+        serverSideResolved: 'teamA',
+        serverSideSource: 'dom',
+        serveConfidence: 'high',
+      },
+      {
+        prematchBaseline: baseline,
+      },
+    )
+
+    expect(result.prematchBaseline.pointBaselineA).toBe(0.68)
+    expect(result.prematchBaseline.pointBaselineB).toBe(0.64)
+    expect(result.probabilityState.pFair.anchor.pointBaselineA).toBe(0.68)
+    expect(result.probabilityState.pFair.anchor.pointBaselineB).toBe(0.64)
+  })
 })
