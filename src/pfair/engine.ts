@@ -55,6 +55,22 @@ function ratioRate(value: string | null | undefined): number | null {
   return parts.made / parts.total
 }
 
+function percentageRate(value: string | null | undefined): number | null {
+  const text = String(value || '').trim()
+  if (!text) return null
+  const pctMatch = text.match(/(\d+(?:\.\d+)?)\s*%/)
+  if (pctMatch) {
+    const pct = Number(pctMatch[1])
+    return Number.isFinite(pct) ? pct / 100 : null
+  }
+  const asNumber = Number(text)
+  if (Number.isFinite(asNumber)) {
+    if (asNumber > 1) return asNumber / 100
+    if (asNumber >= 0) return asNumber
+  }
+  return null
+}
+
 function statsAdjustment(input: {
   resolvedStats?: ResolvedStats | null
 }): { adjustA: number; adjustB: number } {
@@ -135,11 +151,192 @@ function statsAdjustment(input: {
   }
 }
 
-function pointProbabilitiesForServer(input: {
+function liveServePointProb(input: {
+  firstServePercentage: string | null | undefined
+  firstServeWon: string | null | undefined
+  secondServeWon: string | null | undefined
+}): {
+  prob: number | null
+  sample: number
+  firstServeInRate: number | null
+  firstServeWonRate: number | null
+  secondServeWonRate: number | null
+} {
+  const first = ratioParts(input.firstServeWon)
+  const second = ratioParts(input.secondServeWon)
+  const made = (first?.made ?? 0) + (second?.made ?? 0)
+  const total = (first?.total ?? 0) + (second?.total ?? 0)
+  const firstServeWonRate = first && first.total > 0 ? first.made / first.total : null
+  const secondServeWonRate = second && second.total > 0 ? second.made / second.total : null
+  const firstServeInRateFromPct = percentageRate(input.firstServePercentage)
+  const firstServeInRateFromCounts = total > 0 && first ? first.total / total : null
+  const firstServeInRate = firstServeInRateFromPct ?? firstServeInRateFromCounts
+
+  if (
+    firstServeInRate != null &&
+    firstServeWonRate != null &&
+    secondServeWonRate != null
+  ) {
+    const prob = clampProbability(
+      firstServeInRate * firstServeWonRate + (1 - firstServeInRate) * secondServeWonRate,
+    )
+    return {
+      prob,
+      sample: total,
+      firstServeInRate,
+      firstServeWonRate,
+      secondServeWonRate,
+    }
+  }
+
+  if (total <= 0) {
+    return {
+      prob: null,
+      sample: 0,
+      firstServeInRate,
+      firstServeWonRate,
+      secondServeWonRate,
+    }
+  }
+  return {
+    prob: clampProbability(made / total),
+    sample: total,
+    firstServeInRate,
+    firstServeWonRate,
+    secondServeWonRate,
+  }
+}
+
+function baselineServePointProb(input: {
   baseline: PrematchBaseline
   serverSide: PFairSide | null
-  risk: TennisPointRiskDecision
+}): number | null {
+  const serverSide = input.serverSide
+  if (!serverSide) return null
+
+  const pointBaseline =
+    serverSide === 'teamA' ? input.baseline.pointBaselineA ?? null : input.baseline.pointBaselineB ?? null
+  if (pointBaseline != null) return clampProbability(pointBaseline)
+
+  const holdBaseline =
+    serverSide === 'teamA' ? input.baseline.holdBaselineA : input.baseline.holdBaselineB
+  if (holdBaseline == null) return null
+
+  return clampProbability(0.5 + (holdBaseline - 0.5) * DEFAULT_PFAIR_CONFIG.holdToPointScale)
+}
+
+function pointPriorStrength(state: CanonicalMatchState | null): number {
+  const setIndex = state?.scoreboard.setIndex ?? 1
+  const setsWonA = state?.scoreboard.setsWonA ?? 0
+  const setsWonB = state?.scoreboard.setsWonB ?? 0
+  const bestOf = state?.competition.bestOf ?? 3
+  const decidingThreshold = bestOf === 5 ? 2 : 1
+  const isDecidingSet = setsWonA >= decidingThreshold && setsWonB >= decidingThreshold
+
+  if (isDecidingSet) return 15
+  if (setIndex >= 3) return 20
+  if (setIndex === 2) return 30
+  return 50
+}
+
+function blendFairServePointProb(input: {
+  state: CanonicalMatchState | null
+  baseline: PrematchBaseline
   resolvedStats?: ResolvedStats | null
+}): {
+  pointBaselineA: number | null
+  pointBaselineB: number | null
+  firstServeInLiveA: number | null
+  firstServeInLiveB: number | null
+  firstServeWonLiveA: number | null
+  firstServeWonLiveB: number | null
+  secondServeWonLiveA: number | null
+  secondServeWonLiveB: number | null
+  pointLiveA: number | null
+  pointLiveB: number | null
+  pointFairA: number | null
+  pointFairB: number | null
+  liveSampleA: number
+  liveSampleB: number
+  priorKA: number
+  priorKB: number
+  preWeightA: number | null
+  preWeightB: number | null
+  liveWeightA: number | null
+  liveWeightB: number | null
+} {
+  const pointBaselineA = baselineServePointProb({
+    baseline: input.baseline,
+    serverSide: 'teamA',
+  })
+  const pointBaselineB = baselineServePointProb({
+    baseline: input.baseline,
+    serverSide: 'teamB',
+  })
+
+  const liveA = liveServePointProb({
+    firstServePercentage: input.resolvedStats?.firstServePercentageA?.value ?? null,
+    firstServeWon: input.resolvedStats?.firstServeWonA?.value ?? null,
+    secondServeWon: input.resolvedStats?.secondServeWonA?.value ?? null,
+  })
+  const liveB = liveServePointProb({
+    firstServePercentage: input.resolvedStats?.firstServePercentageB?.value ?? null,
+    firstServeWon: input.resolvedStats?.firstServeWonB?.value ?? null,
+    secondServeWon: input.resolvedStats?.secondServeWonB?.value ?? null,
+  })
+
+  const priorK = pointPriorStrength(input.state)
+  const preWeightA = pointBaselineA != null ? priorK / (priorK + liveA.sample) : null
+  const liveWeightA = pointBaselineA != null ? liveA.sample / (priorK + liveA.sample) : liveA.prob != null ? 1 : null
+  const preWeightB = pointBaselineB != null ? priorK / (priorK + liveB.sample) : null
+  const liveWeightB = pointBaselineB != null ? liveB.sample / (priorK + liveB.sample) : liveB.prob != null ? 1 : null
+  const pointFairA =
+    pointBaselineA != null
+      ? clampProbability(((priorK * pointBaselineA) + (liveA.sample * (liveA.prob ?? pointBaselineA))) / (priorK + liveA.sample))
+      : liveA.prob
+  const pointFairB =
+    pointBaselineB != null
+      ? clampProbability(((priorK * pointBaselineB) + (liveB.sample * (liveB.prob ?? pointBaselineB))) / (priorK + liveB.sample))
+      : liveB.prob
+
+  return {
+    pointBaselineA,
+    pointBaselineB,
+    firstServeInLiveA: liveA.firstServeInRate,
+    firstServeInLiveB: liveB.firstServeInRate,
+    firstServeWonLiveA: liveA.firstServeWonRate,
+    firstServeWonLiveB: liveB.firstServeWonRate,
+    secondServeWonLiveA: liveA.secondServeWonRate,
+    secondServeWonLiveB: liveB.secondServeWonRate,
+    pointLiveA: liveA.prob,
+    pointLiveB: liveB.prob,
+    pointFairA,
+    pointFairB,
+    liveSampleA: liveA.sample,
+    liveSampleB: liveB.sample,
+    priorKA: priorK,
+    priorKB: priorK,
+    preWeightA,
+    preWeightB,
+    liveWeightA,
+    liveWeightB,
+  }
+}
+
+function baselineServeGameProb(input: {
+  pointProb: number | null
+  holdFallback: number | null
+}): number {
+  if (input.pointProb == null) {
+    return input.holdFallback ?? 0.5
+  }
+  return gameWinProbFromStandardPoints(input.pointProb, 0, 0)
+}
+
+function pointProbabilitiesForServer(input: {
+  fairPoint: ReturnType<typeof blendFairServePointProb>
+  serverSide: PFairSide | null
+  risk: TennisPointRiskDecision
 }): { pPointA: number | null; pPointB: number | null; source: PFairSource; statsAdjustmentA: number; statsAdjustmentB: number } {
   const serverSide = input.serverSide
   if (!serverSide) {
@@ -152,9 +349,8 @@ function pointProbabilitiesForServer(input: {
     }
   }
 
-  const holdBaseline =
-    serverSide === 'teamA' ? input.baseline.holdBaselineA : input.baseline.holdBaselineB
-  if (holdBaseline == null) {
+  let pPointServer = serverSide === 'teamA' ? input.fairPoint.pointFairA : input.fairPoint.pointFairB
+  if (pPointServer == null) {
     return {
       pPointA: null,
       pPointB: null,
@@ -164,8 +360,7 @@ function pointProbabilitiesForServer(input: {
     }
   }
 
-  const stats = statsAdjustment({ resolvedStats: input.resolvedStats })
-  let pPointServer = 0.5 + (holdBaseline - 0.5) * DEFAULT_PFAIR_CONFIG.holdToPointScale
+  const stats = { adjustA: 0, adjustB: 0 }
 
   const risk = input.risk.finalRisk
   if (risk === 'high') pPointServer -= DEFAULT_PFAIR_CONFIG.riskAdjustments.high
@@ -337,7 +532,10 @@ function setWinProb(
 
 function computeSetProb(input: {
   state: CanonicalMatchState | null
-  baseline: PrematchBaseline
+  futureServePointA: number | null
+  futureServePointB: number | null
+  holdFallbackA: number | null
+  holdFallbackB: number | null
   currentGame: ReturnType<typeof parseCurrentGameProb>
 }): { pSetA: number | null; pSetB: number | null; source: PFairSource } {
   const state = input.state
@@ -358,8 +556,14 @@ function computeSetProb(input: {
     }
   }
 
-  const pServeGameA = input.baseline.holdBaselineA ?? 0.5
-  const pServeGameB = input.baseline.holdBaselineB ?? 0.5
+  const pServeGameA = baselineServeGameProb({
+    pointProb: input.futureServePointA,
+    holdFallback: input.holdFallbackA,
+  })
+  const pServeGameB = baselineServeGameProb({
+    pointProb: input.futureServePointB,
+    holdFallback: input.holdFallbackB,
+  })
   const currentServer = state.serve.resolved ?? null
   const postCurrentServer = postGameServer(currentServer)
 
@@ -378,6 +582,7 @@ function computeMatchProb(input: {
   state: CanonicalMatchState | null
   baseline: PrematchBaseline
   set: ReturnType<typeof computeSetProb>
+  futureSetProbA: number | null
 }): { pMatchA: number | null; pMatchB: number | null; source: PFairSource } {
   const state = input.state
   if (!state || input.set.pSetA == null || input.set.pSetB == null) {
@@ -397,33 +602,30 @@ function computeMatchProb(input: {
 
   const wonA = state.scoreboard.setsWonA ?? 0
   const wonB = state.scoreboard.setsWonB ?? 0
+  const targetSets = (state.competition.bestOf ?? input.baseline.bestOf ?? 3) === 5 ? 3 : 2
 
-  if (wonA >= 2) return { pMatchA: 1, pMatchB: 0, source: 'derived' }
-  if (wonB >= 2) return { pMatchA: 0, pMatchB: 1, source: 'derived' }
+  if (wonA >= targetSets) return { pMatchA: 1, pMatchB: 0, source: 'derived' }
+  if (wonB >= targetSets) return { pMatchA: 0, pMatchB: 1, source: 'derived' }
 
-  if (wonA === 1 && wonB === 1) {
-    return {
-      pMatchA: input.set.pSetA,
-      pMatchB: input.set.pSetB,
-      source: 'derived',
-    }
+  const futureSetProbA = clampProbability(input.futureSetProbA ?? input.baseline.prematchFairProbA ?? 0.5) ?? 0.5
+  const memo = new Map<string, number>()
+  function recurse(setsA: number, setsB: number, currentSet: boolean): number {
+    const key = `${setsA}:${setsB}:${currentSet}:${futureSetProbA.toFixed(6)}:${(input.set.pSetA ?? 0.5).toFixed(6)}`
+    const cached = memo.get(key)
+    if (cached != null) return cached
+    if (setsA >= targetSets) return 1
+    if (setsB >= targetSets) return 0
+
+    const setProbA = currentSet ? (input.set.pSetA ?? futureSetProbA) : futureSetProbA
+    const value = setProbA * recurse(setsA + 1, setsB, false) + (1 - setProbA) * recurse(setsA, setsB + 1, false)
+    memo.set(key, value)
+    return value
   }
 
-  if (wonA === 1 && wonB === 0) {
-    const decidingAnchor = clampProbability(input.baseline.prematchFairProbA ?? 0.5) ?? 0.5
-    const pMatchA = input.set.pSetA + input.set.pSetB * decidingAnchor
-    return { pMatchA, pMatchB: 1 - pMatchA, source: 'derived' }
-  }
-
-  if (wonA === 0 && wonB === 1) {
-    const decidingAnchor = clampProbability(input.baseline.prematchFairProbA ?? 0.5) ?? 0.5
-    const pMatchA = input.set.pSetA * decidingAnchor
-    return { pMatchA, pMatchB: 1 - pMatchA, source: 'derived' }
-  }
-
+  const pMatchA = recurse(wonA, wonB, true)
   return {
-    pMatchA: input.set.pSetA,
-    pMatchB: input.set.pSetB,
+    pMatchA,
+    pMatchB: 1 - pMatchA,
     source: 'derived',
   }
 }
@@ -436,11 +638,15 @@ export function buildPFairState(input: {
 }): PFairState {
   const state = input.state
   const serverSide = state?.serve.resolved ?? null
-  const point = pointProbabilitiesForServer({
+  const fairPoint = blendFairServePointProb({
+    state,
     baseline: input.baseline,
+    resolvedStats: input.resolvedStats,
+  })
+  const point = pointProbabilitiesForServer({
+    fairPoint,
     serverSide,
     risk: input.pointRisk,
-    resolvedStats: input.resolvedStats,
   })
   const game = parseCurrentGameProb({
     state,
@@ -449,13 +655,27 @@ export function buildPFairState(input: {
   })
   const set = computeSetProb({
     state,
-    baseline: input.baseline,
+    futureServePointA: fairPoint.pointFairA,
+    futureServePointB: fairPoint.pointFairB,
+    holdFallbackA: input.baseline.holdBaselineA,
+    holdFallbackB: input.baseline.holdBaselineB,
     currentGame: game,
   })
+  const futureServeGameA = baselineServeGameProb({
+    pointProb: fairPoint.pointFairA,
+    holdFallback: input.baseline.holdBaselineA,
+  })
+  const futureServeGameB = baselineServeGameProb({
+    pointProb: fairPoint.pointFairB,
+    holdFallback: input.baseline.holdBaselineB,
+  })
+  const futureSetProbA =
+    (setWinProb(0, 0, 'teamA', futureServeGameA, futureServeGameB) + setWinProb(0, 0, 'teamB', futureServeGameA, futureServeGameB)) / 2
   const match = computeMatchProb({
     state,
     baseline: input.baseline,
     set,
+    futureSetProbA,
   })
 
   return {
@@ -487,6 +707,8 @@ export function buildPFairState(input: {
     anchor: {
       prematchFairProbA: input.baseline.prematchFairProbA,
       prematchFairProbB: input.baseline.prematchFairProbB,
+      pointBaselineA: input.baseline.pointBaselineA ?? null,
+      pointBaselineB: input.baseline.pointBaselineB ?? null,
       holdBaselineA: input.baseline.holdBaselineA,
       holdBaselineB: input.baseline.holdBaselineB,
       breakBaselineA: input.baseline.breakBaselineA,
@@ -503,6 +725,26 @@ export function buildPFairState(input: {
       integrity: state?.quality.matchIntegrity ?? null,
       statsAdjustmentA: point.statsAdjustmentA,
       statsAdjustmentB: point.statsAdjustmentB,
+      pointBaselineA: fairPoint.pointBaselineA,
+      pointBaselineB: fairPoint.pointBaselineB,
+      firstServeInLiveA: fairPoint.firstServeInLiveA,
+      firstServeInLiveB: fairPoint.firstServeInLiveB,
+      firstServeWonLiveA: fairPoint.firstServeWonLiveA,
+      firstServeWonLiveB: fairPoint.firstServeWonLiveB,
+      secondServeWonLiveA: fairPoint.secondServeWonLiveA,
+      secondServeWonLiveB: fairPoint.secondServeWonLiveB,
+      pointLiveA: fairPoint.pointLiveA,
+      pointLiveB: fairPoint.pointLiveB,
+      pointFairA: fairPoint.pointFairA,
+      pointFairB: fairPoint.pointFairB,
+      liveSampleA: fairPoint.liveSampleA,
+      liveSampleB: fairPoint.liveSampleB,
+      priorKA: fairPoint.priorKA,
+      priorKB: fairPoint.priorKB,
+      preWeightA: fairPoint.preWeightA,
+      preWeightB: fairPoint.preWeightB,
+      liveWeightA: fairPoint.liveWeightA,
+      liveWeightB: fairPoint.liveWeightB,
     },
   }
 }

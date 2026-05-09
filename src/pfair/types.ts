@@ -30,6 +30,8 @@ export interface PFairState {
   anchor: {
     prematchFairProbA: number | null
     prematchFairProbB: number | null
+    pointBaselineA?: number | null
+    pointBaselineB?: number | null
     holdBaselineA: number | null
     holdBaselineB: number | null
     breakBaselineA: number | null
@@ -46,5 +48,25 @@ export interface PFairState {
     integrity: string | null
     statsAdjustmentA: number | null
     statsAdjustmentB: number | null
+    pointBaselineA?: number | null
+    pointBaselineB?: number | null
+    firstServeInLiveA?: number | null
+    firstServeInLiveB?: number | null
+    firstServeWonLiveA?: number | null
+    firstServeWonLiveB?: number | null
+    secondServeWonLiveA?: number | null
+    secondServeWonLiveB?: number | null
+    pointLiveA?: number | null
+    pointLiveB?: number | null
+    pointFairA?: number | null
+    pointFairB?: number | null
+    liveSampleA?: number | null
+    liveSampleB?: number | null
+    priorKA?: number | null
+    priorKB?: number | null
+    preWeightA?: number | null
+    preWeightB?: number | null
+    liveWeightA?: number | null
+    liveWeightB?: number | null
   }
 }

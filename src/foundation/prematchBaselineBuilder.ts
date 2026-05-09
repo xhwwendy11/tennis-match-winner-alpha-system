@@ -49,6 +49,28 @@ function breakBaselineFor(player: PlayerBaseline | null): number | null {
   return null
 }
 
+function pointBaselineFor(player: PlayerBaseline | null): number | null {
+  if (!player) return null
+  const firstServeIn = player.serve.firstServePercentage
+  const firstServeWon = 'firstServePointsWonPercentage' in player.serve
+    ? player.serve.firstServePointsWonPercentage
+    : player.serve.firstServeWonPercentage
+  const secondServeWon = 'secondServePointsWonPercentage' in player.serve
+    ? player.serve.secondServePointsWonPercentage
+    : player.serve.secondServeWonPercentage
+
+  if (
+    typeof firstServeIn === 'number' &&
+    typeof firstServeWon === 'number' &&
+    typeof secondServeWon === 'number'
+  ) {
+    return ((firstServeIn / 100) * (firstServeWon / 100)) + ((1 - firstServeIn / 100) * (secondServeWon / 100))
+  }
+
+  const totalServicePointsWon = player.serve.servicePointsWonPercentage
+  return typeof totalServicePointsWon === 'number' ? totalServicePointsWon / 100 : null
+}
+
 export function buildPrematchBaseline(input: PrematchBaselineBuilderInput): PrematchBaseline {
   const tourType = input.matchState?.competition.tourType ?? 'UNKNOWN'
   const normalizedFair = normalizeTwoWayProbabilities({
@@ -60,6 +82,8 @@ export function buildPrematchBaseline(input: PrematchBaselineBuilderInput): Prem
   const holdBaselineB = holdBaselineFor(input.playerB) ?? defaultHoldBaselineForTour(tourType)
   const breakBaselineA = breakBaselineFor(input.playerA) ?? defaultBreakBaselineForTour(tourType)
   const breakBaselineB = breakBaselineFor(input.playerB) ?? defaultBreakBaselineForTour(tourType)
+  const pointBaselineA = pointBaselineFor(input.playerA)
+  const pointBaselineB = pointBaselineFor(input.playerB)
 
   const source: PrematchBaseline['source'] =
     normalizedFair.probA != null && normalizedFair.probB != null
@@ -96,6 +120,8 @@ export function buildPrematchBaseline(input: PrematchBaselineBuilderInput): Prem
     prematchFairProbB: normalizedFair.probB,
     strengthBucketA: inferStrengthBucket(normalizedFair.probA),
     strengthBucketB: inferStrengthBucket(normalizedFair.probB),
+    pointBaselineA,
+    pointBaselineB,
     holdBaselineA,
     holdBaselineB,
     breakBaselineA,

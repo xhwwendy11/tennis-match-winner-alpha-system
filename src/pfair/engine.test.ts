@@ -106,6 +106,8 @@ function makeBaseline(overrides: Partial<PrematchBaseline> = {}): PrematchBaseli
     prematchFairProbB: 0.39,
     strengthBucketA: 'favorite',
     strengthBucketB: 'underdog',
+    pointBaselineA: 0.68,
+    pointBaselineB: 0.64,
     holdBaselineA: 0.82,
     holdBaselineB: 0.78,
     breakBaselineA: 0.24,
@@ -223,7 +225,7 @@ describe('buildPFairState', () => {
     expect(pFair.match.pMatchB).toBe(0.39)
   })
 
-  it('uses resolved stats as a light adjustment on point-level fair probability', () => {
+  it('uses live serve-point samples to blend baseline point probabilities', () => {
     const withoutStats = buildPFairState({
       state: makeState(),
       baseline: makeBaseline(),
@@ -233,56 +235,75 @@ describe('buildPFairState', () => {
     const withStats = buildPFairState({
       state: makeState(),
       baseline: makeBaseline(),
-      pointRisk: makePointRisk(),
+      pointRisk: makePointRisk({
+        finalRisk: 'medium',
+      }),
       resolvedStats: makeResolvedStats({
-        pointsWonA: { value: 80, source: 'kalshi_ui', confidence: 'high' },
-        pointsWonB: { value: 60, source: 'kalshi_ui', confidence: 'high' },
-        serviceGamesWonA: { value: 8, source: 'kalshi_ui', confidence: 'high' },
-        serviceGamesWonB: { value: 5, source: 'kalshi_ui', confidence: 'high' },
-        doubleFaultsA: { value: 1, source: 'kalshi_ui', confidence: 'high' },
-        doubleFaultsB: { value: 4, source: 'kalshi_ui', confidence: 'high' },
+        firstServeWonA: { value: '44/60', source: 'flashscore', confidence: 'medium' },
+        secondServeWonA: { value: '17/26', source: 'flashscore', confidence: 'medium' },
+        firstServeWonB: { value: '31/55', source: 'flashscore', confidence: 'medium' },
+        secondServeWonB: { value: '11/27', source: 'flashscore', confidence: 'medium' },
       }),
     })
 
     expect(withStats.point.pPointA).toBeGreaterThan(withoutStats.point.pPointA ?? 0)
-    expect(withStats.diagnostics.statsAdjustmentA).toBeGreaterThan(0)
-    expect(withStats.diagnostics.statsAdjustmentB).toBeLessThan(0)
+    expect(withStats.diagnostics.firstServeInLiveA).toBeCloseTo(60 / 86, 6)
+    expect(withStats.diagnostics.firstServeWonLiveA).toBeCloseTo(44 / 60, 6)
+    expect(withStats.diagnostics.secondServeWonLiveA).toBeCloseTo(17 / 26, 6)
+    expect(withStats.diagnostics.pointLiveA).toBeCloseTo(61 / 86, 6)
+    expect(withStats.diagnostics.pointLiveB).toBeCloseTo(42 / 82, 6)
+    expect((withStats.diagnostics.preWeightA ?? 0) + (withStats.diagnostics.liveWeightA ?? 0)).toBeCloseTo(1, 6)
+    expect(withStats.diagnostics.pointFairA).toBeGreaterThan(withoutStats.diagnostics.pointFairA ?? 0)
   })
 
-  it('uses return-side stats as a light positive adjustment when team A is outperforming on return', () => {
-    const withoutReturnStats = buildPFairState({
+  it('prefers explicit point baselines over hold-to-point mapping', () => {
+    const pFair = buildPFairState({
       state: makeState(),
-      baseline: makeBaseline(),
-      pointRisk: makePointRisk(),
-      resolvedStats: makeResolvedStats({
-        pointsWonA: { value: 70, source: 'flashscore', confidence: 'medium' },
-        pointsWonB: { value: 70, source: 'flashscore', confidence: 'medium' },
+      baseline: makeBaseline({
+        pointBaselineA: 0.67,
+        holdBaselineA: 0.95,
+      }),
+      pointRisk: makePointRisk({
+        finalRisk: 'medium',
+        stopTriggered: false,
       }),
     })
 
-    const withReturnStats = buildPFairState({
+    expect(pFair.point.pPointA).toBeCloseTo(0.67, 6)
+    expect(pFair.anchor.pointBaselineA).toBe(0.67)
+  })
+
+  it('lets larger live samples take more control of point fair', () => {
+    const smallerSample = buildPFairState({
       state: makeState(),
       baseline: makeBaseline(),
-      pointRisk: makePointRisk(),
+      pointRisk: makePointRisk({
+        finalRisk: 'medium',
+      }),
       resolvedStats: makeResolvedStats({
-        pointsWonA: { value: 70, source: 'flashscore', confidence: 'medium' },
-        pointsWonB: { value: 70, source: 'flashscore', confidence: 'medium' },
-        returnPointsWonA: { value: '52% (26/50)', source: 'flashscore', confidence: 'medium' },
-        returnPointsWonB: { value: '41% (18/44)', source: 'flashscore', confidence: 'medium' },
-        firstServeReturnPointsWonA: { value: '38% (10/26)', source: 'flashscore', confidence: 'medium' },
-        firstServeReturnPointsWonB: { value: '29% (7/24)', source: 'flashscore', confidence: 'medium' },
-        secondServeReturnPointsWonA: { value: '67% (16/24)', source: 'flashscore', confidence: 'medium' },
-        secondServeReturnPointsWonB: { value: '45% (11/20)', source: 'flashscore', confidence: 'medium' },
-        breakPointsSavedA: { value: '75% (3/4)', source: 'flashscore', confidence: 'medium' },
-        breakPointsSavedB: { value: '50% (2/4)', source: 'flashscore', confidence: 'medium' },
-        breakPointsConvertedA: { value: '50% (2/4)', source: 'flashscore', confidence: 'medium' },
-        breakPointsConvertedB: { value: '20% (1/5)', source: 'flashscore', confidence: 'medium' },
+        firstServeWonA: { value: '12/18', source: 'flashscore', confidence: 'medium' },
+        secondServeWonA: { value: '6/10', source: 'flashscore', confidence: 'medium' },
+        firstServeWonB: { value: '10/17', source: 'flashscore', confidence: 'medium' },
+        secondServeWonB: { value: '5/11', source: 'flashscore', confidence: 'medium' },
       }),
     })
 
-    expect(withReturnStats.point.pPointA).toBeGreaterThan(withoutReturnStats.point.pPointA ?? 0)
-    expect(withReturnStats.diagnostics.statsAdjustmentA).toBeGreaterThan(withoutReturnStats.diagnostics.statsAdjustmentA ?? 0)
-    expect(withReturnStats.diagnostics.statsAdjustmentB).toBeLessThan(withoutReturnStats.diagnostics.statsAdjustmentB ?? 0)
+    const largerSample = buildPFairState({
+      state: makeState(),
+      baseline: makeBaseline(),
+      pointRisk: makePointRisk({
+        finalRisk: 'medium',
+      }),
+      resolvedStats: makeResolvedStats({
+        firstServeWonA: { value: '44/60', source: 'flashscore', confidence: 'medium' },
+        secondServeWonA: { value: '17/26', source: 'flashscore', confidence: 'medium' },
+        firstServeWonB: { value: '31/55', source: 'flashscore', confidence: 'medium' },
+        secondServeWonB: { value: '11/27', source: 'flashscore', confidence: 'medium' },
+      }),
+    })
+
+    expect(largerSample.diagnostics.liveSampleA).toBeGreaterThan(smallerSample.diagnostics.liveSampleA ?? 0)
+    expect(largerSample.diagnostics.pointFairA).toBeGreaterThan(smallerSample.diagnostics.pointFairA ?? 0)
   })
 
   it('does not overflow on abnormal long tiebreak point states', () => {

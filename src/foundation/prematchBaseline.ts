@@ -19,6 +19,8 @@ export interface PrematchBaseline {
   prematchFairProbB: number | null
   strengthBucketA: StrengthBucket
   strengthBucketB: StrengthBucket
+  pointBaselineA?: number | null
+  pointBaselineB?: number | null
   holdBaselineA: number | null
   holdBaselineB: number | null
   breakBaselineA: number | null

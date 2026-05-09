@@ -166,6 +166,6 @@ describe('extractMatchFromServerPayload', () => {
 
     expect(result.decisionSnapshot.sourceCoverage.flashscoreStatsAvailable).toBe(true)
     expect(result.resolvedStats?.pointsWonA?.value).toBe(55)
-    expect(result.probabilityState.pFair.diagnostics.statsAdjustmentA).not.toBe(0)
+    expect(result.probabilityState.pFair.diagnostics.pointFairA).not.toBeNull()
   })
 })

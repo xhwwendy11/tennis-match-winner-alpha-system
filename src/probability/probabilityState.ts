@@ -37,6 +37,8 @@ export function buildDefaultPrematchBaseline(state: CanonicalMatchState | null):
     prematchFairProbB: null,
     strengthBucketA: inferStrengthBucket(null),
     strengthBucketB: inferStrengthBucket(null),
+    pointBaselineA: null,
+    pointBaselineB: null,
     holdBaselineA: null,
     holdBaselineB: null,
     breakBaselineA: null,
